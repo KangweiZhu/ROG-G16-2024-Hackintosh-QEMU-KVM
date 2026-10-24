@@ -1,0 +1,7 @@
+# machine-specific settings and everything the scripts generate or download
+/config.env
+/state/
+*.qcow2
+*.raw
+*.img
+__pycache__/

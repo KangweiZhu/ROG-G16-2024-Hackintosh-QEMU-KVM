@@ -1,0 +1,13 @@
+[core]
+coreMode=1
+computerName=mac
+
+[client]
+remoteHost=10.0.2.2
+
+[security]
+tlsEnabled=false
+
+[gui]
+startCoreWithGui=true
+enableUpdateCheck=false
