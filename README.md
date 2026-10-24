@@ -113,13 +113,13 @@ scripts/guest.sh autologin && scripts/guest.sh deskflow && scripts/guest.sh scre
 ## Daily use
 
 ```sh
-sudo scripts/host.sh on                 # GPU → VM (no-op if already done)
+sudo scripts/host.sh on                 # GPU → VM; the first time after logging in it asks you to log out and in once
 PASSTHROUGH=1 scripts/boot-macos.sh     # after 20 s keyboard/mouse go to the VM: press both Shift keys to take them back
                                         # after ~2 min macOS is logged in and Deskflow connects
 vncviewer 127.0.0.1::5900               # optional: macOS in a window on the Linux desktop
 scripts/guest.sh shell                  # SSH into the guest
 # shut macOS down, then:
-sudo scripts/host.sh off                # GPU → NVIDIA driver, BAR1 back to its original size
+sudo scripts/host.sh off                # GPU → NVIDIA driver, BAR1 restored; HDMI is the host's again from the next login
 ```
 
 `EVDEV=0` skips the evdev fallback. `OPENCORE_IMG=state/opencore/OpenCore-imacpro.qcow2` gives you the boot
@@ -140,8 +140,9 @@ picker (recovery). Without `PASSTHROUGH=1` the VM runs on the emulated display i
 | 7 | `pacman -S deskflow`                                                                                      | keyboard/mouse sharing                                              |
 | 8 | `~/.config/Deskflow/Deskflow.conf`                                                                        | Deskflow server, 127.0.0.1 only                                     |
 
-1, 2 and 8 apply at the next login; 3 and 4 at the next boot (`on` raises memlock for the current terminal meanwhile).
-Side effect of 1: while it is set, outputs wired to the dGPU are not used by the host desktop.
+1 and 2 exist only while the VM is in use: `on` writes them, `off` removes them. KWin reads them at login, so the first
+`on` of a session asks for one log out/in, and after `off` the host desktop gets the dGPU's ports (HDMI) back at the
+next login. 8 applies at the next login; 3 and 4 at the next boot (`on` raises memlock for the current terminal meanwhile).
 
 ## Layout
 

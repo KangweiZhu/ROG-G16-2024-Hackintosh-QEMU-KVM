@@ -102,7 +102,9 @@ Check: `scripts/guest.sh shell` logs in without a password; `sw_vers` shows 15.x
 sudo scripts/host.sh on
 ```
 
-If it lists KWin/Xwayland: the settings are now written; the user logs out and back in, then runs it again.
+If it lists KWin/Xwayland: `on` has just told KWin to use only the iGPU from the next login; the user logs out and
+back in once, then runs it again. `off` removes those KWin settings, so the host desktop gets the dGPU's ports back
+at the following login: one log out/in per session in which the VM is used.
 Check: `sudo scripts/host.sh status` shows both functions on `vfio-pci` and BAR1 at 256M; `ulimit -l` in the
 terminal that will start QEMU is `unlimited`.
 

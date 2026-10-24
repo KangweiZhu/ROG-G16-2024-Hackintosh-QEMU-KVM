@@ -99,7 +99,8 @@ scripts/guest.sh prefs    # 关自动更新、关睡眠
 sudo scripts/host.sh on
 ```
 
-如果它列出了 KWin/Xwayland：设置已经写好了，让用户注销再登录，然后再运行一次。检查：`sudo scripts/host.sh status`
+如果它列出了 KWin/Xwayland：`on` 已经让 KWin 从下次登录起只用核显，让用户注销重登一次，再运行一次 `on`。`off` 会撤掉
+这两项设置，下次登录时 Linux 桌面就能重新用接在独显上的接口：每次用虚拟机，只需要注销一次。检查：`sudo scripts/host.sh status`
 显示两个功能都在 `vfio-pci` 上、BAR1 是 256M；准备启动 QEMU 的那个终端里 `ulimit -l` 是 `unlimited`。
 
 带着显卡启动，但先用会显示选盘界面的那块引导盘（驱动安装程序要能看到显卡）：

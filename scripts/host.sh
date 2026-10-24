@@ -2,19 +2,22 @@
 # Every host change the GPU-passthrough VM needs, behind one entry point. Run with sudo from your own account:
 #
 #   sudo scripts/host.sh status     list each change and its current state (read-only)
-#   sudo scripts/host.sh prepare    apply all configuration changes but keep the GPU on the host (before installing macOS)
+#   sudo scripts/host.sh prepare    apply the permanent configuration (3, 4, 7, 8) and keep the GPU on the host
 #   sudo scripts/host.sh on         prepare + hand the GPU to vfio-pci + raise memlock for this terminal
-#   sudo scripts/host.sh off        give the GPU back to the host driver (after the VM is shut down)
+#   sudo scripts/host.sh off        give the GPU back to the host driver (after the VM is shut down); the host desktop
+#                                   gets the dGPU's ports (HDMI) back at the next login
 #   sudo scripts/host.sh rollback   undo everything below
 #
 # Changes (rollback undoes all of them; backups and markers live in state/host-backup/):
 #   1  ~/.config/environment.d/90-macos-vm-kwin.conf      KWIN_DRM_DEVICES=<iGPU>: KWin drives only the iGPU, so it
-#                                                          does not keep the dGPU open (KDE Plasma Wayland)
+#                                                          does not keep the dGPU open (KDE Plasma Wayland).
+#                                                          Written by `on`, removed by `off` (see kwin_igpu_only)
 #   1b /etc/udev/rules.d/90-macos-vm-host-igpu.rules      only if KWIN_DRM_DEVICE does not exist: a colon-free symlink
 #                                                          to the iGPU card node (KWIN_DRM_DEVICES is ':'-separated)
 #   2  ~/.config/systemd/user/plasma-kwin_wayland.service.d/90-macos-vm-egl-mesa.conf
 #                                                          KWin loads only Mesa's EGL; glvnd would otherwise load
-#                                                          NVIDIA's EGL first and KWin keeps a context on the dGPU
+#                                                          NVIDIA's EGL first and KWin keeps a context on the dGPU.
+#                                                          Written by `on`, removed by `off`
 #   3  /etc/systemd/system/user@.service.d/90-vfio-memlock.conf       LimitMEMLOCK=infinity: VFIO pins all guest RAM.
 #                                                          Desktop sessions are started by the systemd user manager,
 #                                                          so /etc/security/limits.d has no effect on them
@@ -80,13 +83,6 @@ apply_config() {
       "$0" "$HOST_IGPU_PCI" "${KWIN_DRM_DEVICE#/dev/}" > "$IGPU_RULE"
     udevadm control --reload && udevadm trigger --subsystem-match=drm
   fi
-  # 1 + 2 (user files, written as the user)
-  as_user mkdir -p "$(dirname "$KWIN_ENV")" "$(dirname "$EGL_DROPIN")"
-  printf '# written by %s: KWin uses only the iGPU so the dGPU can be passed to the macOS VM\nKWIN_DRM_DEVICES=%s\n' \
-    "$0" "$KWIN_DRM_DEVICE" | as_user tee "$KWIN_ENV" >/dev/null
-  printf '# written by %s: no NVIDIA EGL in KWin, so the dGPU can be passed to the macOS VM\n[Service]\nEnvironment=__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json\n' \
-    "$0" | as_user tee "$EGL_DROPIN" >/dev/null
-  as_user systemctl --user daemon-reload || true
   # 3 + 4
   mkdir -p "$(dirname "$MEMLOCK")"
   printf '# written by %s: VFIO passthrough pins all guest RAM\n[Service]\nLimitMEMLOCK=infinity\n' "$0" > "$MEMLOCK"
@@ -109,6 +105,21 @@ apply_config() {
   fi
 }
 
+# 1 + 2 only while the VM is in use: KWin reads them at login. `on` writes them (one log out/in before the first
+# handover); `off` removes them, so at the next login the host desktop uses the dGPU's ports (e.g. HDMI) again.
+kwin_igpu_only() {
+  as_user mkdir -p "$(dirname "$KWIN_ENV")" "$(dirname "$EGL_DROPIN")"
+  printf '# written by %s: KWin uses only the iGPU so the dGPU can be passed to the macOS VM\nKWIN_DRM_DEVICES=%s\n' \
+    "$0" "$KWIN_DRM_DEVICE" | as_user tee "$KWIN_ENV" >/dev/null
+  printf '# written by %s: no NVIDIA EGL in KWin, so the dGPU can be passed to the macOS VM\n[Service]\nEnvironment=__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json\n' \
+    "$0" | as_user tee "$EGL_DROPIN" >/dev/null
+  as_user systemctl --user daemon-reload || true
+}
+kwin_all_gpus() {
+  rm -f "$KWIN_ENV" "$EGL_DROPIN"; rmdir "$(dirname "$EGL_DROPIN")" 2>/dev/null || true
+  as_user systemctl --user daemon-reload || true
+}
+
 bind_gpu() {
   if [[ $(drv "$GPU_PCI") == vfio-pci && $(drv "$GPU_AUDIO_PCI") == vfio-pci ]]; then
     if [[ -n $BAR1_VM_LOG2_MB && $(bar1_log2mb) != "$BAR1_VM_LOG2_MB" ]]; then
@@ -123,7 +134,8 @@ bind_gpu() {
   if [[ -n $holders ]]; then
     echo "These processes still use the GPU; it was not handed over:"
     for p in $holders; do echo "  $p $(tr '\0' ' ' < "/proc/$p/cmdline" | cut -c1-100)"; done
-    echo "If it is KWin/Xwayland: the settings are written now, log out and back in, then run sudo $0 on again."
+    echo "If it is KWin/Xwayland: KWin is now set to use only the iGPU from the next login."
+    echo "Log out and back in once, then run sudo $0 on again."
     exit 1
   fi
   systemctl stop nvidia-powerd.service 2>/dev/null || true
@@ -162,6 +174,7 @@ status) status ;;
 prepare) apply_config; status ;;
 on)
   apply_config
+  kwin_igpu_only
   bind_gpu
   # 3 needs a reboot for running sessions: raise memlock for the shell that ran sudo (QEMU started there inherits it)
   # and for running Claude Code agents, which start QEMU from their own shells.
@@ -169,12 +182,16 @@ on)
   for p in $shell $(pgrep -u "$U" -x claude || true); do prlimit --pid "$p" --memlock=unlimited:unlimited; done
   status
   ;;
-off) unbind_gpu; status ;;
+off)
+  unbind_gpu
+  kwin_all_gpus
+  status
+  echo "The GPU is back on the host driver. The host desktop uses its ports (e.g. HDMI) again from the next login."
+  ;;
 rollback)
   unbind_gpu
   rm -f "$BK/bar1-host-log2mb"
-  rm -f "$KWIN_ENV" "$EGL_DROPIN"; rmdir "$(dirname "$EGL_DROPIN")" 2>/dev/null || true
-  as_user systemctl --user daemon-reload || true
+  kwin_all_gpus
   if [[ -e $IGPU_RULE ]]; then rm -f "$IGPU_RULE"; udevadm control --reload; fi
   rm -f "$MEMLOCK"; rmdir "$(dirname "$MEMLOCK")" 2>/dev/null || true
   systemctl daemon-reload

@@ -98,13 +98,13 @@ scripts/guest.sh autologin && scripts/guest.sh deskflow && scripts/guest.sh scre
 ## 日常怎么用
 
 ```sh
-sudo scripts/host.sh on                 # 显卡给虚拟机（已经给过就什么都不做）
+sudo scripts/host.sh on                 # 显卡给虚拟机；每次登录后第一次 on 会让你注销重登一次
 PASSTHROUGH=1 scripts/boot-macos.sh     # 开机 20 秒后键鼠会被虚拟机接管，同时按左右 Shift 拿回来
                                         # 大概 2 分钟后 macOS 自动登录，Deskflow 连上，鼠标往左右边缘一甩就过去了
 vncviewer 127.0.0.1::5900               # 想在 Linux 窗口里看一眼 macOS 的话
 scripts/guest.sh shell                  # SSH 进 macOS
 # 在 macOS 里关机，然后：
-sudo scripts/host.sh off                # 显卡还给 NVIDIA 驱动，BAR1 恢复原来的大小
+sudo scripts/host.sh off                # 显卡还给 NVIDIA 驱动，BAR1 恢复；下次登录起 HDMI 重新归 Linux
 ```
 
 ## 宿主机到底改了什么
@@ -122,9 +122,10 @@ sudo scripts/host.sh off                # 显卡还给 NVIDIA 驱动，BAR1 恢�
 | 7 | `pacman -S deskflow` | 键鼠共享 |
 | 8 | `~/.config/Deskflow/Deskflow.conf` | Deskflow 服务端，只监听本机 |
 
-1、2、8 重新登录后生效，3、4 重启后生效（这期间 `on` 会临时给当前终端放开 memlock，不用急着重启）。
-第 1 条有个代价：开着的时候，宿主机桌面用不了接在独显上的接口，比如 HDMI。反正 HDMI 这时候是给 macOS 用的，
-我觉得可以接受。
+1、2 只在用虚拟机的时候存在：`on` 写入，`off` 撤掉。KWin 只在登录时读这两项，所以每次登录后第一次 `on` 要注销重登一次；
+`off` 之后，下次登录时 Linux 桌面就重新能用 HDMI 这些接在独显上的口了。我觉得这个代价合理：要用 macOS 本来就是
+一件“专门要做”的事，注销一次换来显卡能干净地交出去，值。8 重新登录后生效，3、4 重启后生效（这期间 `on` 会临时给
+当前终端放开 memlock，不用急着重启）。
 
 ## 踩过的坑
 
