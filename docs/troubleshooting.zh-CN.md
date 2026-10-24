@@ -151,6 +151,14 @@ ProcessorType 设成 Core i5（4 核）或 Xeon W（8 核）。
 日志在 macOS 的 `/var/log/Lilu_*.txt`，关键一行是 `chosen Quad-Core Intel Core i5 patch for 4 core CPU`。
 日志里那句 `disabling user patcher on request!` 在 macOS 11 以后是正常的，不用管。
 
+## 磁盘
+
+### `mac.qcow2` 只涨不缩
+镜像是按需增长的（虚拟大小 160 GB），但没开 discard 的话，macOS 删掉文件腾出来的空间永远不会还给宿主机。
+**解决：** 系统盘加 `discard=unmap`，再加 `rotation_rate=1` 让 macOS 把它当成 SSD（`system_profiler SPSerialATADataType`
+显示 `TRIM Support: Yes`，不需要 `trimforce`）。实测：开了以后第一次开机，镜像就从 36.9 GiB 缩到了 22.1 GiB
+（APFS 挂载时会把空闲空间整体 TRIM 一遍）；写一个 2 GB 的文件涨到 24.1 GiB，删掉后一分钟左右缩回 22.1 GiB。
+
 ## 已知限制
 
 - **开机要 2 分钟左右**，大部分时间花在显卡初始化上（驱动会在 “PCI configuration end” 那里停一会儿）。

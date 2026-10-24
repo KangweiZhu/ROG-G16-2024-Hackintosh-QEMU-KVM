@@ -107,6 +107,15 @@ macOS offers Apple's DH authentication (type 30) first; KRDC doesn't send the us
 ### The processor name doesn't change ("2 GHz Quad-Core Intel Core i3")
 RestrictEvents rewrites the AppleSystemInfo string macOS would show **for this core count** ("Quad-Core Intel Core i5" for 4 cores, "8-Core Intel Xeon W" for 8). With SMBIOS `ProcessorType` = 0 OpenCore derives "Core i3" from the 2 GHz clock, so the rewritten string is never shown. **Fix:** `patch-config.py` sets ProcessorType to Core i5 (4 cores) or Xeon W (8 cores). Found with the DEBUG kexts: `DEBUG_KEXTS=1 EXTRA_BOOT_ARGS="-liludbgall -revdbg liludump=120" opencore/build.sh`, log in the guest's `/var/log/Lilu_*.txt` (`chosen Quad-Core Intel Core i5 patch for 4 core CPU`). `disabling user patcher on request!` in that log is normal on macOS 11+.
 
+## Disk
+
+### `mac.qcow2` only ever grows
+The image is thin-provisioned (160 GB virtual), but without discard the blocks macOS frees are never released.
+**Fix:** `discard=unmap` on the system disk and `rotation_rate=1` so macOS sees an SSD (`system_profiler
+SPSerialATADataType` → `TRIM Support: Yes`; `trimforce` was not needed). Measured: the first boot with it shrank the
+image from 36.9 to 22.1 GiB (APFS trims free space at mount); writing and deleting a 2 GB file grew it to 24.1 GiB
+and it was back at 22.1 GiB about a minute later.
+
 ## Known limitations
 
 - **Boot takes ~2 minutes**, mostly the GPU initialising (the driver pauses at "PCI configuration end").

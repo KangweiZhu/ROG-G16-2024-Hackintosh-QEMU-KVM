@@ -45,8 +45,10 @@ args=(
   -device ide-hd,bus=sata.2,drive=OpenCoreBoot
   -drive id=Recovery,if=none,snapshot=on,format=raw,file=recovery.img
   -device ide-hd,bus=sata.3,drive=Recovery
-  -drive id=MacHDD,if=none,format=qcow2,file=mac.qcow2
-  -device ide-hd,bus=sata.4,drive=MacHDD
+  # discard=unmap: blocks macOS frees (TRIM) are released from mac.qcow2, so the file shrinks again.
+  # rotation_rate=1 reports an SSD: macOS then shows "TRIM Support: Yes" and trims (no trimforce needed).
+  -drive id=MacHDD,if=none,format=qcow2,file=mac.qcow2,discard=unmap,detect-zeroes=unmap
+  -device ide-hd,bus=sata.4,drive=MacHDD,rotation_rate=1
   -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22,hostfwd=tcp:127.0.0.1:$VNC_PORT-:5900"
   -device virtio-net-pci,netdev=net0,id=net0,mac=52:54:00:c9:18:27
   -qmp "unix:$QMP_SOCK,server=on,wait=off"
