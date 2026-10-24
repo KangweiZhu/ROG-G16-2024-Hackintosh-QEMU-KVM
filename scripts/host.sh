@@ -58,8 +58,14 @@ set_bar1() {
   echo "$1" > "/sys/bus/pci/devices/$GPU_PCI/resource1_resize"
 }
 kwin_live() {
-  local p; p=$(pgrep -u "$U" -x kwin_wayland | head -1) || { echo "KWin not running"; return; }
-  tr '\0' '\n' < "/proc/$p/environ" | grep -qx "KWIN_DRM_DEVICES=$KWIN_DRM_DEVICE" && echo "active in this session" || echo "not active yet: log out and back in"
+  local p live; p=$(pgrep -u "$U" -x kwin_wayland | head -1) || { echo "KWin not running"; return; }
+  tr '\0' '\n' < "/proc/$p/environ" | grep -qx "KWIN_DRM_DEVICES=$KWIN_DRM_DEVICE" && live=1 || live=0
+  case "$([[ -e $KWIN_ENV ]] && echo 1 || echo 0)$live" in
+    11) echo "in effect" ;;
+    10) echo "takes effect at the next login" ;;
+    01) echo "removed, but this session still uses only the iGPU until you log out" ;;
+    00) echo "host desktop uses all GPUs" ;;
+  esac
 }
 
 status() {
